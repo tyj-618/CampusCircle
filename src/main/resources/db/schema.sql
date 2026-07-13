@@ -6,18 +6,34 @@ CREATE DATABASE IF NOT EXISTS campuscircle
 
 USE campuscircle;
 
+CREATE TABLE IF NOT EXISTS school (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '学校ID',
+    name VARCHAR(64) NOT NULL COMMENT '学校名称',
+    province VARCHAR(32) NOT NULL COMMENT '省份',
+    city VARCHAR(32) NOT NULL COMMENT '城市',
+    latitude DECIMAL(10, 6) NOT NULL COMMENT '纬度',
+    longitude DECIMAL(10, 6) NOT NULL COMMENT '经度',
+    status TINYINT NOT NULL DEFAULT 0 COMMENT '状态：0-启用，1-禁用',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    KEY idx_city_status (city, status),
+    KEY idx_location (latitude, longitude)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='学校表';
+
 CREATE TABLE IF NOT EXISTS `user` (
     id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '用户ID',
     username VARCHAR(32) NOT NULL COMMENT '用户名',
     password VARCHAR(128) NOT NULL COMMENT '加密后的密码',
     nickname VARCHAR(32) NOT NULL COMMENT '昵称',
+    school_id BIGINT NOT NULL DEFAULT 1 COMMENT '所属学校ID',
     avatar_url VARCHAR(255) DEFAULT NULL COMMENT '头像地址',
     bio VARCHAR(255) DEFAULT NULL COMMENT '个人简介',
     role TINYINT NOT NULL DEFAULT 0 COMMENT '角色：0-普通用户，1-管理员',
     status TINYINT NOT NULL DEFAULT 0 COMMENT '状态：0-正常，1-禁用',
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
-    UNIQUE KEY uk_username (username)
+    UNIQUE KEY uk_username (username),
+    KEY idx_school_id (school_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='用户表';
 
 CREATE TABLE IF NOT EXISTS category (
@@ -34,6 +50,7 @@ CREATE TABLE IF NOT EXISTS category (
 CREATE TABLE IF NOT EXISTS post (
     id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '帖子ID',
     user_id BIGINT NOT NULL COMMENT '发帖用户ID',
+    school_id BIGINT NOT NULL COMMENT '帖子所属学校ID',
     category_id BIGINT NOT NULL COMMENT '分类ID',
     title VARCHAR(100) NOT NULL COMMENT '标题',
     content TEXT NOT NULL COMMENT '正文内容',
@@ -41,6 +58,7 @@ CREATE TABLE IF NOT EXISTS post (
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     KEY idx_user_id (user_id),
+    KEY idx_school_created (school_id, created_at),
     KEY idx_category_created (category_id, created_at),
     KEY idx_created_at (created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='帖子表';

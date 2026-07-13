@@ -4,6 +4,7 @@ import com.tyj.campuscircle.auth.CurrentUserService;
 import com.tyj.campuscircle.common.ErrorCode;
 import com.tyj.campuscircle.common.PageResponse;
 import com.tyj.campuscircle.exception.BusinessException;
+import com.tyj.campuscircle.school.SchoolService;
 import com.tyj.campuscircle.user.UserProfile;
 import com.tyj.campuscircle.user.UserMapper;
 import org.springframework.stereotype.Service;
@@ -17,14 +18,16 @@ public class PostService {
     private final CurrentUserService currentUserService;
     private final PostMapper postMapper;
     private final UserMapper userMapper;
+    private final SchoolService schoolService;
     private final HotPostRankStore hotPostRankStore;
     private final ViewCountService viewCountService;
 
     public PostService(CurrentUserService currentUserService, PostMapper postMapper, UserMapper userMapper,
-                       HotPostRankStore hotPostRankStore, ViewCountService viewCountService) {
+                       SchoolService schoolService, HotPostRankStore hotPostRankStore, ViewCountService viewCountService) {
         this.currentUserService = currentUserService;
         this.postMapper = postMapper;
         this.userMapper = userMapper;
+        this.schoolService = schoolService;
         this.hotPostRankStore = hotPostRankStore;
         this.viewCountService = viewCountService;
     }
@@ -32,9 +35,10 @@ public class PostService {
     @Transactional
     public CreatePostResponse createPost(String authorization, CreatePostRequest request) {
         Long currentUserId = currentUserService.requireUserId(authorization);
+        UserProfile currentUser = findExistingUser(currentUserId);
         ensureEnabledCategory(request.categoryId());
 
-        Long postId = postMapper.savePost(currentUserId, request);
+        Long postId = postMapper.savePost(currentUserId, currentUser.schoolId(), request);
         if (postId == null) {
             throw new BusinessException(ErrorCode.INTERNAL_ERROR, "帖子创建失败");
         }
@@ -49,6 +53,22 @@ public class PostService {
         }
 
         PageQueryResult<PostListItem> result = postMapper.findPosts(page, size, categoryId, keyword, sort);
+        List<PostListItemResponse> records = result.records().stream()
+                .map(PostListItemResponse::from)
+                .toList();
+        return PageResponse.of(page, size, result.total(), records);
+    }
+
+    public PageResponse<PostListItemResponse> listNearbyFeed(String authorization, int page, int size,
+                                                             double radiusKm, Long categoryId, String sort) {
+        Long currentUserId = currentUserService.requireUserId(authorization);
+        UserProfile currentUser = findExistingUser(currentUserId);
+        if (categoryId != null) {
+            ensureEnabledCategory(categoryId);
+        }
+
+        List<Long> schoolIds = schoolService.listNearbySchoolIds(currentUser.schoolId(), radiusKm);
+        PageQueryResult<PostListItem> result = postMapper.findPostsBySchoolIds(schoolIds, page, size, categoryId, sort);
         List<PostListItemResponse> records = result.records().stream()
                 .map(PostListItemResponse::from)
                 .toList();
@@ -126,6 +146,11 @@ public class PostService {
         if (!postMapper.existsEnabledCategory(categoryId)) {
             throw new BusinessException(ErrorCode.NOT_FOUND, "分类不存在或已禁用");
         }
+    }
+
+    private UserProfile findExistingUser(Long userId) {
+        return userMapper.findProfileById(userId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, "用户不存在"));
     }
 
     private void ensureCanManagePost(Long currentUserId, Long postAuthorId) {

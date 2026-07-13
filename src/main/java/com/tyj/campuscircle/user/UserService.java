@@ -3,6 +3,7 @@ package com.tyj.campuscircle.user;
 import com.tyj.campuscircle.auth.CurrentUserService;
 import com.tyj.campuscircle.common.ErrorCode;
 import com.tyj.campuscircle.exception.BusinessException;
+import com.tyj.campuscircle.school.SchoolService;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -10,10 +11,12 @@ public class UserService {
 
     private final CurrentUserService currentUserService;
     private final UserMapper userMapper;
+    private final SchoolService schoolService;
 
-    public UserService(CurrentUserService currentUserService, UserMapper userMapper) {
+    public UserService(CurrentUserService currentUserService, UserMapper userMapper, SchoolService schoolService) {
         this.currentUserService = currentUserService;
         this.userMapper = userMapper;
+        this.schoolService = schoolService;
     }
 
     public UserProfileResponse getCurrentUser(String authorization) {
@@ -29,12 +32,14 @@ public class UserService {
         String nickname = cleanOrDefault(request.nickname(), oldProfile.nickname());
         String avatarUrl = cleanOrDefault(request.avatarUrl(), oldProfile.avatarUrl());
         String bio = cleanOrDefault(request.bio(), oldProfile.bio());
+        Long schoolId = request.schoolId() == null ? oldProfile.schoolId() : request.schoolId();
 
         if (nickname == null || nickname.isBlank()) {
             throw new BusinessException(ErrorCode.PARAM_ERROR, "昵称不能为空");
         }
 
-        userMapper.updateProfile(currentUserId, nickname, avatarUrl, bio);
+        schoolService.findEnabledSchool(schoolId);
+        userMapper.updateProfile(currentUserId, nickname, avatarUrl, bio, schoolId);
 
         UserProfile updatedProfile = findExistingUser(currentUserId);
         return UserProfileResponse.from(updatedProfile);
@@ -49,6 +54,9 @@ public class UserService {
                 userProfile.id(),
                 userProfile.username(),
                 userProfile.nickname(),
+                userProfile.schoolId(),
+                userProfile.schoolName(),
+                userProfile.schoolCity(),
                 userProfile.avatarUrl(),
                 userProfile.bio(),
                 postCount,

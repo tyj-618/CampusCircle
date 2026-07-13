@@ -10,6 +10,8 @@ public record UpdateUserProfileRequest(
         String avatarUrl,
 
         @Size(max = 255, message = "个人简介长度不能超过 255 位")
-        String bio
+        String bio,
+
+        Long schoolId
 ) {
 }

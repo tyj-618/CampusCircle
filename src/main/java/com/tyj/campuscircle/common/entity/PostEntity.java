@@ -10,6 +10,7 @@ public class PostEntity {
     @TableId(type = IdType.AUTO)
     private Long id;
     private Long userId;
+    private Long schoolId;
     private Long categoryId;
     private String title;
     private String content;
@@ -29,6 +30,14 @@ public class PostEntity {
 
     public void setUserId(Long userId) {
         this.userId = userId;
+    }
+
+    public Long getSchoolId() {
+        return schoolId;
+    }
+
+    public void setSchoolId(Long schoolId) {
+        this.schoolId = schoolId;
     }
 
     public Long getCategoryId() {

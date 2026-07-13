@@ -5,19 +5,36 @@ DROP TABLE IF EXISTS post_stat;
 DROP TABLE IF EXISTS post;
 DROP TABLE IF EXISTS category;
 DROP TABLE IF EXISTS `user`;
+DROP TABLE IF EXISTS school;
+
+CREATE TABLE school (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    name VARCHAR(64) NOT NULL,
+    province VARCHAR(32) NOT NULL,
+    city VARCHAR(32) NOT NULL,
+    latitude DECIMAL(10, 6) NOT NULL,
+    longitude DECIMAL(10, 6) NOT NULL,
+    status TINYINT NOT NULL DEFAULT 0,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    KEY idx_city_status (city, status),
+    KEY idx_location (latitude, longitude)
+);
 
 CREATE TABLE `user` (
     id BIGINT PRIMARY KEY AUTO_INCREMENT,
     username VARCHAR(32) NOT NULL,
     password VARCHAR(128) NOT NULL,
     nickname VARCHAR(32) NOT NULL,
+    school_id BIGINT NOT NULL DEFAULT 1,
     avatar_url VARCHAR(255) DEFAULT NULL,
     bio VARCHAR(255) DEFAULT NULL,
     role TINYINT NOT NULL DEFAULT 0,
     status TINYINT NOT NULL DEFAULT 0,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE KEY uk_username (username)
+    UNIQUE KEY uk_username (username),
+    KEY idx_user_school_id (school_id)
 );
 
 CREATE TABLE category (
@@ -34,6 +51,7 @@ CREATE TABLE category (
 CREATE TABLE post (
     id BIGINT PRIMARY KEY AUTO_INCREMENT,
     user_id BIGINT NOT NULL,
+    school_id BIGINT NOT NULL,
     category_id BIGINT NOT NULL,
     title VARCHAR(100) NOT NULL,
     content TEXT NOT NULL,
@@ -41,6 +59,7 @@ CREATE TABLE post (
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     KEY idx_post_user_id (user_id),
+    KEY idx_school_created (school_id, created_at),
     KEY idx_category_created (category_id, created_at),
     KEY idx_created_at (created_at)
 );

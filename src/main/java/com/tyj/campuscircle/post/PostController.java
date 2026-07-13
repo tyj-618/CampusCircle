@@ -47,6 +47,17 @@ public class PostController {
         return ApiResponse.success(postService.listPosts(page, size, categoryId, keyword, sort));
     }
 
+    @GetMapping("/posts/feed")
+    public ApiResponse<PageResponse<PostListItemResponse>> listNearbyFeed(
+            @RequestHeader(value = "Authorization", required = false) String authorization,
+            @RequestParam(defaultValue = "1") @Min(1) int page,
+            @RequestParam(defaultValue = "10") @Min(1) @Max(50) int size,
+            @RequestParam(defaultValue = "5") @Min(1) @Max(50) double radiusKm,
+            @RequestParam(required = false) Long categoryId,
+            @RequestParam(defaultValue = "latest") String sort) {
+        return ApiResponse.success(postService.listNearbyFeed(authorization, page, size, radiusKm, categoryId, sort));
+    }
+
     @GetMapping("/posts/{postId}")
     public ApiResponse<PostDetailResponse> getPostDetail(
             @PathVariable Long postId,

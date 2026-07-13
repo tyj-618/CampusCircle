@@ -12,6 +12,7 @@ public class UserEntity {
     private String username;
     private String password;
     private String nickname;
+    private Long schoolId;
     private String avatarUrl;
     private String bio;
     private Integer role;
@@ -47,6 +48,14 @@ public class UserEntity {
 
     public void setNickname(String nickname) {
         this.nickname = nickname;
+    }
+
+    public Long getSchoolId() {
+        return schoolId;
+    }
+
+    public void setSchoolId(Long schoolId) {
+        this.schoolId = schoolId;
     }
 
     public String getAvatarUrl() {

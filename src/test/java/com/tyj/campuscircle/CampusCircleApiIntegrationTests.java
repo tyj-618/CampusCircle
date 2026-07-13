@@ -9,9 +9,11 @@ import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
 
 import java.net.URI;
+import java.net.URLEncoder;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -28,7 +30,7 @@ class CampusCircleApiIntegrationTests {
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Test
-    void campusHubCoreApiFlow() throws Exception {
+    void campusCircleCoreApiFlow() throws Exception {
         register("alice", "123456", "小艾");
         register("bob", "123456", "小林");
 
@@ -37,6 +39,7 @@ class CampusCircleApiIntegrationTests {
 
         Long categoryId = firstCategoryId();
         Long postId = createPost(aliceToken, categoryId);
+        assertLocationFeed(aliceToken, postId);
         Long commentId = createComment(bobToken, postId);
 
         likePost(bobToken, postId);
@@ -60,7 +63,7 @@ class CampusCircleApiIntegrationTests {
     }
 
     @Test
-    void campusHubCoreApiBoundaryFlow() throws Exception {
+    void campusCircleCoreApiBoundaryFlow() throws Exception {
         String suffix = String.valueOf(System.nanoTime());
         String authorUsername = "author_" + suffix;
         String readerUsername = "reader_" + suffix;
@@ -155,6 +158,34 @@ class CampusCircleApiIntegrationTests {
         Long postId = response.at("/data/postId").asLong();
         assertThat(postId).isPositive();
         return postId;
+    }
+
+    private void assertLocationFeed(String token, Long postId) throws Exception {
+        JsonNode nearbySchools = get("/api/schools/nearby?schoolId=1&radiusKm=30", null);
+        assertThat(nearbySchools.at("/code").asInt()).isZero();
+        assertThat(nearbySchools.at("/data/0/id").asLong()).isEqualTo(1);
+
+        String schoolName = nearbySchools.at("/data/0/name").asText();
+        JsonNode schools = get("/api/schools/search?keyword=" + URLEncoder.encode(schoolName, StandardCharsets.UTF_8), null);
+        assertThat(schools.at("/code").asInt()).isZero();
+        assertThat(schools.at("/data").size())
+                .describedAs(schools.toPrettyString())
+                .isGreaterThanOrEqualTo(1);
+
+        JsonNode feed = get("/api/posts/feed?radiusKm=30", token);
+        assertThat(feed.at("/code").asInt()).isZero();
+        assertThat(feed.at("/data/total").asLong()).isGreaterThanOrEqualTo(1);
+        JsonNode matchedPost = null;
+        for (JsonNode record : feed.at("/data/records")) {
+            if (record.at("/id").asLong() == postId) {
+                matchedPost = record;
+                break;
+            }
+        }
+        assertThat(matchedPost)
+                .describedAs(feed.toPrettyString())
+                .isNotNull();
+        assertThat(matchedPost.at("/school/id").asLong()).isEqualTo(1);
     }
 
     private Long createComment(String token, Long postId) throws Exception {

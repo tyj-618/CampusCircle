@@ -24,9 +24,10 @@ public interface PostMapper extends BaseMapper<PostEntity> {
         return countEnabledCategory(categoryId) > 0;
     }
 
-    default Long savePost(Long userId, CreatePostRequest request) {
+    default Long savePost(Long userId, Long schoolId, CreatePostRequest request) {
         PostEntity post = new PostEntity();
         post.setUserId(userId);
+        post.setSchoolId(schoolId);
         post.setCategoryId(request.categoryId());
         post.setTitle(request.title().trim());
         post.setContent(request.content().trim());
@@ -38,13 +39,16 @@ public interface PostMapper extends BaseMapper<PostEntity> {
     void savePostStat(@Param("postId") Long postId);
 
     @Select("""
-            SELECT p.id, p.user_id AS userId, p.category_id AS categoryId, p.title, p.content, p.status,
+            SELECT p.id, p.user_id AS userId, p.school_id AS schoolId, p.category_id AS categoryId,
+                   p.title, p.content, p.status,
                    p.created_at AS createdAt, p.updated_at AS updatedAt,
+                   s.name AS schoolName, s.city AS schoolCity,
                    c.name AS categoryName, c.code AS categoryCode,
                    u.nickname AS authorNickname, u.avatar_url AS authorAvatarUrl, u.role AS authorRole,
                    ps.view_count AS viewCount, ps.like_count AS likeCount,
                    ps.comment_count AS commentCount, ps.hot_score AS hotScore
             FROM post p
+            JOIN school s ON p.school_id = s.id
             JOIN category c ON p.category_id = c.id
             JOIN `user` u ON p.user_id = u.id
             JOIN post_stat ps ON p.id = ps.post_id
@@ -67,7 +71,8 @@ public interface PostMapper extends BaseMapper<PostEntity> {
     @SelectProvider(type = PostSqlProvider.class, method = "countPosts")
     long countPosts(@Param("categoryId") Long categoryId,
                     @Param("keyword") String keyword,
-                    @Param("userId") Long userId);
+                    @Param("userId") Long userId,
+                    @Param("schoolIds") List<Long> schoolIds);
 
     @SelectProvider(type = PostSqlProvider.class, method = "findPosts")
     List<PostListItem> selectPosts(@Param("limit") int limit,
@@ -76,22 +81,33 @@ public interface PostMapper extends BaseMapper<PostEntity> {
                                    @Param("keyword") String keyword,
                                    @Param("userId") Long userId,
                                    @Param("sort") String sort,
-                                   @Param("ids") List<Long> ids);
+                                   @Param("ids") List<Long> ids,
+                                   @Param("schoolIds") List<Long> schoolIds);
 
     default PageQueryResult<PostListItem> findPosts(int page, int size, Long categoryId, String keyword, String sort) {
-        long total = countPosts(categoryId, keyword, null);
-        List<PostListItem> records = selectPosts(size, (page - 1) * size, categoryId, keyword, null, sort, null);
+        long total = countPosts(categoryId, keyword, null, null);
+        List<PostListItem> records = selectPosts(size, (page - 1) * size, categoryId, keyword, null, sort, null, null);
         return new PageQueryResult<>(total, records);
     }
 
     default PageQueryResult<PostListItem> findPostsByUserId(Long userId, int page, int size) {
-        long total = countPosts(null, null, userId);
-        List<PostListItem> records = selectPosts(size, (page - 1) * size, null, null, userId, null, null);
+        long total = countPosts(null, null, userId, null);
+        List<PostListItem> records = selectPosts(size, (page - 1) * size, null, null, userId, null, null, null);
+        return new PageQueryResult<>(total, records);
+    }
+
+    default PageQueryResult<PostListItem> findPostsBySchoolIds(List<Long> schoolIds, int page, int size,
+                                                               Long categoryId, String sort) {
+        if (schoolIds.isEmpty()) {
+            return new PageQueryResult<>(0, List.of());
+        }
+        long total = countPosts(categoryId, null, null, schoolIds);
+        List<PostListItem> records = selectPosts(size, (page - 1) * size, categoryId, null, null, sort, null, schoolIds);
         return new PageQueryResult<>(total, records);
     }
 
     default List<PostListItem> findHotPosts(int limit, Long categoryId) {
-        return selectPosts(limit, 0, categoryId, null, null, "hot", null);
+        return selectPosts(limit, 0, categoryId, null, null, "hot", null, null);
     }
 
     default List<PostListItem> findHotPostsByIds(List<Long> postIds, Long categoryId) {
@@ -102,7 +118,7 @@ public interface PostMapper extends BaseMapper<PostEntity> {
         for (int i = 0; i < postIds.size(); i++) {
             order.put(postIds.get(i), i);
         }
-        return selectPosts(postIds.size(), 0, categoryId, null, null, "hot", postIds).stream()
+        return selectPosts(postIds.size(), 0, categoryId, null, null, "hot", postIds, null).stream()
                 .sorted(Comparator.comparingInt(item -> order.getOrDefault(item.id(), Integer.MAX_VALUE)))
                 .toList();
     }
@@ -142,6 +158,7 @@ public interface PostMapper extends BaseMapper<PostEntity> {
                     <script>
                     SELECT COUNT(*)
                     FROM post p
+                    JOIN school s ON p.school_id = s.id
                     JOIN category c ON p.category_id = c.id
                     JOIN `user` u ON p.user_id = u.id
                     JOIN post_stat ps ON p.id = ps.post_id
@@ -156,19 +173,22 @@ public interface PostMapper extends BaseMapper<PostEntity> {
                     : "p.created_at DESC";
             return """
                     <script>
-                    SELECT p.id, p.title, p.content, p.category_id AS categoryId,
+                    SELECT p.id, p.title, p.content,
+                           p.school_id AS schoolId, s.name AS schoolName, s.city AS schoolCity,
+                           p.category_id AS categoryId,
                            c.name AS categoryName, c.code AS categoryCode,
                            u.id AS authorId, u.nickname AS authorNickname, u.avatar_url AS authorAvatarUrl,
                            ps.view_count AS viewCount, ps.like_count AS likeCount,
                            ps.comment_count AS commentCount, ps.hot_score AS hotScore,
                            p.created_at AS createdAt
                     FROM post p
+                    JOIN school s ON p.school_id = s.id
                     JOIN category c ON p.category_id = c.id
                     JOIN `user` u ON p.user_id = u.id
                     JOIN post_stat ps ON p.id = ps.post_id
-                    """ + whereClause(params) + """
-                     ORDER BY """ + orderBy + """
-                     LIMIT #{limit} OFFSET #{offset}
+                    """ + whereClause(params)
+                    + "ORDER BY " + orderBy + " LIMIT #{limit} OFFSET #{offset}"
+                    + """
                     </script>
                     """;
         }
@@ -185,11 +205,15 @@ public interface PostMapper extends BaseMapper<PostEntity> {
             if (params.get("userId") != null) {
                 where.append(" AND p.user_id = #{userId}");
             }
-            if (params.get("ids") instanceof List<?> ids && !ids.isEmpty()) {
+            if (params.containsKey("schoolIds") && params.get("schoolIds") instanceof List<?> schoolIds && !schoolIds.isEmpty()) {
+                where.append(" AND p.school_id IN ");
+                where.append("<foreach collection=\"schoolIds\" item=\"schoolId\" open=\"(\" separator=\",\" close=\")\">#{schoolId}</foreach>");
+            }
+            if (params.containsKey("ids") && params.get("ids") instanceof List<?> ids && !ids.isEmpty()) {
                 where.append(" AND p.id IN ");
                 where.append("<foreach collection=\"ids\" item=\"id\" open=\"(\" separator=\",\" close=\")\">#{id}</foreach>");
             }
-            return where.toString();
+            return where + " ";
         }
     }
 }

@@ -59,9 +59,31 @@ Authorization: Bearer <token>
 {
   "nickname": "Alice",
   "avatarUrl": "https://example.com/avatar.png",
-  "bio": "南京大学学生"
+  "bio": "南京大学学生",
+  "schoolId": 1
 }
 ```
+
+## School
+
+| 方法 | 路径 | 说明 | 登录 |
+| --- | --- | --- | --- |
+| GET | `/api/schools/search` | 按关键词搜索学校 | 否 |
+| GET | `/api/schools/nearby` | 查询指定学校附近的学校 | 否 |
+
+学校搜索参数：
+
+| 参数 | 说明 |
+| --- | --- |
+| `keyword` | 学校名称、省份或城市关键词 |
+| `limit` | 返回数量，默认 `10`，最大 `50` |
+
+附近学校参数：
+
+| 参数 | 说明 |
+| --- | --- |
+| `schoolId` | 当前学校 ID |
+| `radiusKm` | 查询半径，单位千米，默认 `10`，最大 `50` |
 
 ## Category
 
@@ -79,6 +101,7 @@ Authorization: Bearer <token>
 | PUT | `/api/posts/{postId}` | 编辑帖子 | 是 |
 | DELETE | `/api/posts/{postId}` | 删除帖子 | 是 |
 | GET | `/api/posts/hot` | 查询热门帖子 | 否 |
+| GET | `/api/posts/feed` | 查询当前用户附近学校帖子 Feed | 是 |
 
 发帖请求：
 
@@ -98,6 +121,16 @@ Authorization: Bearer <token>
 | `size` | 每页数量，默认 `10` |
 | `categoryId` | 分类 ID |
 | `keyword` | 标题或内容关键词 |
+| `sort` | 排序方式，`hot` 表示按热度排序 |
+
+附近学校帖子 Feed 查询参数：
+
+| 参数 | 说明 |
+| --- | --- |
+| `page` | 页码，默认 `1` |
+| `size` | 每页数量，默认 `10` |
+| `radiusKm` | 当前用户所属学校周边半径，单位千米，默认 `10`，最大 `50` |
+| `categoryId` | 分类 ID |
 | `sort` | 排序方式，`hot` 表示按热度排序 |
 
 ## Comment
