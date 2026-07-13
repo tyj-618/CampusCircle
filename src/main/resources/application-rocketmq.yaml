@@ -1,0 +1,9 @@
+rocketmq:
+  name-server: ${CAMPUSCIRCLE_ROCKETMQ_NAME_SERVER:localhost:9876}
+  producer:
+    group: ${CAMPUSCIRCLE_ROCKETMQ_PRODUCER_GROUP:campuscircle-producer-group}
+
+campuscircle:
+  rocketmq:
+    comment-topic: ${CAMPUSCIRCLE_COMMENT_TOPIC:campuscircle-comment-event}
+    like-topic: ${CAMPUSCIRCLE_LIKE_TOPIC:campuscircle-like-event}

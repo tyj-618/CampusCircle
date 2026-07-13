@@ -1,0 +1,41 @@
+spring:
+  application:
+    name: CampusCircle
+
+  datasource:
+    url: ${CAMPUSCIRCLE_DB_URL:jdbc:mysql://localhost:3306/campuscircle?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai}
+    username: ${CAMPUSCIRCLE_DB_USERNAME:root}
+    password: ${CAMPUSCIRCLE_DB_PASSWORD:}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+
+  data:
+    redis:
+      host: ${CAMPUSCIRCLE_REDIS_HOST:localhost}
+      port: ${CAMPUSCIRCLE_REDIS_PORT:6379}
+      password: ${CAMPUSCIRCLE_REDIS_PASSWORD:}
+      database: ${CAMPUSCIRCLE_REDIS_DATABASE:0}
+
+  sql:
+    init:
+      mode: never
+
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+
+server:
+  port: ${SERVER_PORT:8080}
+  servlet:
+    encoding:
+      charset: UTF-8
+      enabled: true
+      force-response: true
+
+campuscircle:
+  view-count:
+    flush-interval-seconds: ${CAMPUSCIRCLE_VIEW_COUNT_FLUSH_INTERVAL_SECONDS:10}
+  hot-post-cache:
+    ttl-seconds: ${CAMPUSCIRCLE_HOT_POST_CACHE_TTL_SECONDS:300}
+    jitter-seconds: ${CAMPUSCIRCLE_HOT_POST_CACHE_JITTER_SECONDS:60}
+    empty-ttl-seconds: ${CAMPUSCIRCLE_HOT_POST_EMPTY_CACHE_TTL_SECONDS:30}
+    rebuild-lock-ttl-seconds: ${CAMPUSCIRCLE_HOT_POST_REBUILD_LOCK_TTL_SECONDS:10}
