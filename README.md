@@ -58,6 +58,7 @@ src/main/java/com/tyj/campuscircle
 
 - **持久层重构**：使用 MyBatis-Plus 建模用户、帖子、评论、点赞、通知等核心表，通过实体映射承接基础 CRUD，通过注解 SQL 保留复杂列表、详情和统计查询的可读性。
 - **位置化社区模型**：抽象学校实体，用户和帖子都关联学校；发帖时自动写入用户所属学校，并支持按半径聚合附近学校帖子，形成区别于普通校园论坛的区域化信息流。
+- **附近学校缓存**：在 `redis` profile 下缓存指定学校和半径对应的附近学校列表，降低高频 Feed 查询中的重复距离计算和数据库访问；默认 profile 使用直查实现，便于本地测试。
 - **热榜缓存设计**：使用 Redis ZSet 维护热门帖子排行，MySQL `post_stat.hot_score` 作为持久化热度来源；缓存为空或过期时支持回源重建，并使用短 TTL、随机抖动和重建锁降低击穿风险。
 - **事件解耦通知**：抽象评论/点赞领域事件，默认同步消费，启用 RocketMQ 后使用事务消息投递，通知侧基于 `event_key` 做幂等写入。
 - **浏览量削峰**：使用 `ConcurrentHashMap + LongAdder + ScheduledExecutorService` 聚合浏览量增量，定时批量刷库，减少高频浏览场景下的数据库写压力。
@@ -207,6 +208,8 @@ source src/main/resources/db/data.sql;
 | `CAMPUSCIRCLE_HOT_POST_CACHE_JITTER_SECONDS` | `60` | 热门帖子缓存随机抖动 |
 | `CAMPUSCIRCLE_HOT_POST_EMPTY_CACHE_TTL_SECONDS` | `30` | 空结果缓存 TTL |
 | `CAMPUSCIRCLE_HOT_POST_REBUILD_LOCK_TTL_SECONDS` | `10` | 热榜回源重建锁 TTL |
+| `CAMPUSCIRCLE_NEARBY_SCHOOL_CACHE_TTL_SECONDS` | `300` | 附近学校列表缓存 TTL |
+| `CAMPUSCIRCLE_NEARBY_SCHOOL_CACHE_JITTER_SECONDS` | `60` | 附近学校列表缓存随机抖动 |
 
 ### 本地 Maven 启动
 
@@ -235,11 +238,13 @@ http://localhost:8080
 默认 profile 不依赖 Redis：
 
 - `InMemoryTokenStore` 存储登录 Token。
+- `NoOpNearbySchoolCacheStore` 直接从 MySQL 查询附近学校。
 - `NoOpHotPostRankStore` 直接从 MySQL 查询热门帖子。
 
 启用 `redis` profile 后：
 
 - `RedisTokenStore` 使用 Redis 存储 Token。
+- `RedisNearbySchoolCacheStore` 缓存附近学校列表。
 - `RedisHotPostRankStore` 使用 Redis ZSet 维护热门帖子排行榜。
 
 启动命令：

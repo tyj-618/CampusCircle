@@ -18,9 +18,11 @@ public class SchoolService {
     private static final double MAX_RADIUS_KM = 50.0;
 
     private final SchoolMapper schoolMapper;
+    private final NearbySchoolCacheStore nearbySchoolCacheStore;
 
-    public SchoolService(SchoolMapper schoolMapper) {
+    public SchoolService(SchoolMapper schoolMapper, NearbySchoolCacheStore nearbySchoolCacheStore) {
         this.schoolMapper = schoolMapper;
+        this.nearbySchoolCacheStore = nearbySchoolCacheStore;
     }
 
     public List<SchoolResponse> searchSchools(String keyword, int limit) {
@@ -41,11 +43,12 @@ public class SchoolService {
         SchoolEntity center = findEnabledSchool(schoolId);
         validateRadius(radiusKm);
 
-        return schoolMapper.findEnabledByCity(center.getCity()).stream()
-                .map(school -> SchoolResponse.from(school, distanceKm(center, school)))
-                .filter(response -> response.distanceKm() <= radiusKm)
-                .sorted(Comparator.comparing(SchoolResponse::distanceKm))
-                .toList();
+        return nearbySchoolCacheStore.listNearbySchools(schoolId, radiusKm, () ->
+                schoolMapper.findEnabledByCity(center.getCity()).stream()
+                        .map(school -> SchoolResponse.from(school, distanceKm(center, school)))
+                        .filter(response -> response.distanceKm() <= radiusKm)
+                        .sorted(Comparator.comparing(SchoolResponse::distanceKm))
+                        .toList());
     }
 
     public List<Long> listNearbySchoolIds(Long schoolId, double radiusKm) {

@@ -39,3 +39,6 @@ campuscircle:
     jitter-seconds: ${CAMPUSCIRCLE_HOT_POST_CACHE_JITTER_SECONDS:60}
     empty-ttl-seconds: ${CAMPUSCIRCLE_HOT_POST_EMPTY_CACHE_TTL_SECONDS:30}
     rebuild-lock-ttl-seconds: ${CAMPUSCIRCLE_HOT_POST_REBUILD_LOCK_TTL_SECONDS:10}
+  nearby-school-cache:
+    ttl-seconds: ${CAMPUSCIRCLE_NEARBY_SCHOOL_CACHE_TTL_SECONDS:300}
+    jitter-seconds: ${CAMPUSCIRCLE_NEARBY_SCHOOL_CACHE_JITTER_SECONDS:60}
