@@ -148,9 +148,9 @@ Request:
 }
 ```
 
-The backend derives the user and allowed school IDs from the token. It searches only published posts within that scope and returns supporting post references with the answer. When no relevant post is found, `insufficientEvidence` is `true`.
+后端会根据 Token 识别当前用户，并计算该用户查看范围内允许访问的学校 ID。系统仅检索这些学校中处于正常发布状态的帖子，并在生成回答时返回对应的帖子引用。当查看范围内没有检索到相关帖子时，`insufficientEvidence` 为 `true`。
 
-For local development, `CAMPUSCIRCLE_AI_PROVIDER=mock` is the default. To use an OpenAI-compatible chat-completions service, set `CAMPUSCIRCLE_AI_PROVIDER=openai-compatible` and provide `CAMPUSCIRCLE_AI_BASE_URL`, `CAMPUSCIRCLE_AI_API_KEY`, and `CAMPUSCIRCLE_AI_MODEL` through environment variables. Set `CAMPUSCIRCLE_AI_STRUCTURED_OUTPUT=true` only when the selected provider supports the OpenAI-compatible JSON object response format; this mode omits `max_tokens` to prevent a truncated JSON response. For Qwen mixed-thinking models, set `CAMPUSCIRCLE_AI_ENABLE_THINKING=false` for short retrieval-augmented answers and enable it only for reasoning-heavy tasks. Do not commit a real API key.
+本地开发默认使用 `CAMPUSCIRCLE_AI_PROVIDER=mock`，无需连接外部模型服务。需要接入兼容 OpenAI Chat Completions 协议的模型服务时，将 `CAMPUSCIRCLE_AI_PROVIDER` 设置为 `openai-compatible`，并通过环境变量提供 `CAMPUSCIRCLE_AI_BASE_URL`、`CAMPUSCIRCLE_AI_API_KEY` 和 `CAMPUSCIRCLE_AI_MODEL`。仅当模型服务支持 OpenAI 兼容的 JSON Object 响应格式时，才将 `CAMPUSCIRCLE_AI_STRUCTURED_OUTPUT` 设置为 `true`；该模式不会传递 `max_tokens`，用于降低 JSON 响应被截断的风险。对于支持混合思考模式的 Qwen 模型，简短的检索增强问答建议设置 `CAMPUSCIRCLE_AI_ENABLE_THINKING=false`，仅在复杂推理任务中启用思考模式。真实 API Key 只能保存在本地环境变量或未纳入版本控制的 `.env` 文件中，不得提交到仓库。
 
 ## Comment
 

@@ -1,17 +1,19 @@
 # CampusCircle
 
-CampusCircle 是一个基于学校地理位置的校园社区后端服务，支持学生绑定所属学校，并按距离范围查看附近学校的帖子。项目提供用户认证、个人资料、学校检索、帖子发布、评论互动、点赞、站内通知和后台管理等能力，重点放在业务建模、接口规范、持久层设计、缓存排行榜、事件解耦和集成测试等后端工程实践。
+CampusCircle 是一个基于学校地理位置的校园社区后端服务，支持学生绑定所属学校，并按距离范围查看附近学校的帖子。项目提供用户认证、个人资料、学校检索、帖子发布、评论互动、点赞、站内通知、后台管理和校园信息智能问答等能力，重点放在业务建模、接口规范、持久层设计、缓存容错、事件解耦、模型服务接入和集成测试等后端工程实践。
 
 ## Features
 
 - 用户注册、登录、退出和 Token 校验
 - 用户资料维护、学校绑定、公开主页、用户发帖和评论查询
-- 学校搜索、附近学校查询、附近学校帖子 Feed
+- 学校搜索、附近学校查询、附近学校帖子 Feed，支持传统分页和游标分页
 - 分类、帖子列表、帖子详情、发帖、编辑和删除，发帖自动归属到用户所属学校
 - 评论、点赞、取消点赞、点赞状态查询
 - 评论/点赞触发站内通知，支持未读数和批量已读
 - 管理端隐藏/恢复帖子、禁用/启用用户
-- 热门帖子排行榜、浏览量批量刷库、事件发布与消费扩展
+- 热门帖子排行榜、浏览量批量刷库、Redis 异常时数据库降级
+- 基于附近学校帖子检索的校园信息智能问答，支持 Mock 和 OpenAI 兼容模型服务
+- 事件发布与消费扩展
 
 ## Tech Stack
 
@@ -21,6 +23,7 @@ CampusCircle 是一个基于学校地理位置的校园社区后端服务，支�
 | 持久层 | MyBatis-Plus, MySQL |
 | 缓存与排行 | Redis, ZSet |
 | 消息事件 | RocketMQ |
+| AI 应用 | OpenAI-compatible API, Qwen, RAG |
 | 安全 | BCrypt password hashing, Bearer Token |
 | 工程化 | Docker, Docker Compose |
 | 测试 | JUnit, Spring Boot Test, H2 |
@@ -28,12 +31,16 @@ CampusCircle 是一个基于学校地理位置的校园社区后端服务，支�
 ## Architecture
 
 ```text
-Controller -> Service -> Mapper(MyBatis-Plus) -> Database
+Controller -> Service -> Mapper(MyBatis-Plus) -> MySQL
+                    |-> Redis
+                    |-> RocketMQ
+                    └-> AI Model API
 ```
 
 - `Controller`：处理 REST API 请求、参数校验和统一响应。
 - `Service`：承载业务规则、登录校验、权限判断、事件发布和排行榜协调。
 - `Mapper`：基于 MyBatis-Plus 处理实体映射、单表 CRUD、复杂查询和统计更新。
+- `AI`：在用户附近学校权限范围内检索帖子，组装提示词并调用模型服务，校验模型返回的帖子引用。
 - `Common / Exception`：提供统一响应结构、错误码、业务异常和全局异常处理。
 
 项目结构：
@@ -41,10 +48,11 @@ Controller -> Service -> Mapper(MyBatis-Plus) -> Database
 ```text
 src/main/java/com/tyj/campuscircle
 ├── admin       后台管理
+├── ai          校园信息智能问答、帖子检索、提示词和模型客户端
 ├── auth        注册、登录、Token、当前用户识别
 ├── category    帖子分类
 ├── comment     评论
-├── common      通用响应、分页响应、错误码
+├── common      通用响应、分页响应、游标分页、错误码
 ├── event       领域事件、RocketMQ 发布和消费
 ├── exception   业务异常、全局异常处理
 ├── like        点赞
@@ -59,7 +67,11 @@ src/main/java/com/tyj/campuscircle
 - **持久层重构**：使用 MyBatis-Plus 建模用户、帖子、评论、点赞、通知等核心表，通过实体映射承接基础 CRUD，通过注解 SQL 保留复杂列表、详情和统计查询的可读性。
 - **位置化社区模型**：抽象学校实体，用户和帖子都关联学校；发帖时自动写入用户所属学校，并支持按半径聚合附近学校帖子，形成区别于普通校园论坛的区域化信息流。
 - **附近学校缓存**：在 `redis` profile 下缓存指定学校和半径对应的附近学校列表，降低高频 Feed 查询中的重复距离计算和数据库访问；默认 profile 使用直查实现，便于本地测试。
-- **热榜缓存设计**：使用 Redis ZSet 维护热门帖子排行，MySQL `post_stat.hot_score` 作为持久化热度来源；缓存为空或过期时支持回源重建，并使用短 TTL、随机抖动和重建锁降低击穿风险。
+- **游标分页 Feed**：使用 `created_at + id` 组成稳定游标，避免数据持续新增时传统页码分页产生重复或遗漏，并通过 URL-safe Base64 封装游标传输。
+- **热榜缓存设计**：使用 Redis ZSet 维护热门帖子排行，MySQL `post_stat.hot_score` 作为持久化热度来源；缓存为空或过期时支持回源重建，并使用短 TTL、随机抖动和 Lua 原子释放重建锁降低击穿风险。
+- **缓存容错降级**：Redis 读取、写入或锁操作异常时保留数据库查询结果和主业务执行结果，避免缓存故障扩大为接口整体不可用。
+- **范围约束问答**：根据 Token 获取当前用户和所属学校，仅在指定半径内的正常帖子中检索上下文；模型返回后再次校验引用 ID，避免回答引用越权或不存在的帖子。
+- **模型接入封装**：抽象 `AiModelClient`，默认使用 Mock 完成本地开发，并支持通过 OpenAI 兼容协议接入 Qwen 等模型；提供超时、有限重试、用户级限流、结构化输出和 Token 用量日志。
 - **事件解耦通知**：抽象评论/点赞领域事件，默认同步消费，启用 RocketMQ 后使用事务消息投递，通知侧基于 `event_key` 做幂等写入。
 - **浏览量削峰**：使用 `ConcurrentHashMap + LongAdder + ScheduledExecutorService` 聚合浏览量增量，定时批量刷库，减少高频浏览场景下的数据库写压力。
 - **接口一致性**：统一响应结构、错误码枚举、参数校验、业务异常和全局异常处理，保证正常返回和异常返回格式稳定。
@@ -67,7 +79,7 @@ src/main/java/com/tyj/campuscircle
 
 ## API
 
-核心接口清单见 [docs/API.md](docs/API.md)，包括认证、用户、学校、帖子、评论、点赞、通知和后台管理接口。
+核心接口清单见 [docs/API.md](docs/API.md)，包括认证、用户、学校、帖子、评论、点赞、通知、校园信息智能问答和后台管理接口。
 
 常见请求示例：
 
@@ -91,6 +103,24 @@ GET /api/schools/nearby?schoolId=1&radiusKm=30
 ```http
 GET /api/posts/feed?radiusKm=30
 Authorization: Bearer <token>
+```
+
+```http
+GET /api/posts/feed/cursor?radiusKm=30&size=10
+Authorization: Bearer <token>
+```
+
+```http
+POST /api/ai/assistant/ask
+Authorization: Bearer <token>
+Content-Type: application/json
+```
+
+```json
+{
+  "question": "附近有哪些适合复习的地方？",
+  "radiusKm": 10
+}
 ```
 
 ```http
@@ -210,6 +240,16 @@ source src/main/resources/db/data.sql;
 | `CAMPUSCIRCLE_HOT_POST_REBUILD_LOCK_TTL_SECONDS` | `10` | 热榜回源重建锁 TTL |
 | `CAMPUSCIRCLE_NEARBY_SCHOOL_CACHE_TTL_SECONDS` | `300` | 附近学校列表缓存 TTL |
 | `CAMPUSCIRCLE_NEARBY_SCHOOL_CACHE_JITTER_SECONDS` | `60` | 附近学校列表缓存随机抖动 |
+| `CAMPUSCIRCLE_AI_PROVIDER` | `mock` | 模型服务类型，可设置为 `mock` 或 `openai-compatible` |
+| `CAMPUSCIRCLE_AI_BASE_URL` | 空 | OpenAI 兼容模型服务的基础地址 |
+| `CAMPUSCIRCLE_AI_API_KEY` | 空 | 模型服务 API Key，仅通过本地环境变量或 `.env` 提供 |
+| `CAMPUSCIRCLE_AI_MODEL` | 空 | 调用的模型名称 |
+| `CAMPUSCIRCLE_AI_TIMEOUT_SECONDS` | `20` | 单次模型调用超时时间 |
+| `CAMPUSCIRCLE_AI_MAX_RETRIES` | `1` | 可重试异常的最大重试次数 |
+| `CAMPUSCIRCLE_AI_MAX_REQUESTS_PER_MINUTE` | `5` | 单用户每分钟最大问答请求数 |
+| `CAMPUSCIRCLE_AI_MAX_OUTPUT_TOKENS` | `600` | 非结构化模式下的最大输出 Token 数 |
+| `CAMPUSCIRCLE_AI_STRUCTURED_OUTPUT` | `false` | 是否要求模型使用 JSON Object 格式响应 |
+| `CAMPUSCIRCLE_AI_ENABLE_THINKING` | 空 | 是否启用模型思考模式，留空表示使用模型默认值 |
 
 ### 本地 Maven 启动
 
@@ -286,6 +326,21 @@ src/main/resources/application-rocketmq.yaml
 ./mvnw spring-boot:run -Dspring-boot.run.profiles=redis,rocketmq
 ```
 
+### AI Model
+
+默认配置使用 Mock 模型客户端，不需要 API Key，也不会发送外部请求。接入兼容 OpenAI Chat Completions 协议的模型服务时，在本地 `.env` 或运行环境中配置：
+
+```dotenv
+CAMPUSCIRCLE_AI_PROVIDER=openai-compatible
+CAMPUSCIRCLE_AI_BASE_URL=https://example.com/compatible-mode/v1
+CAMPUSCIRCLE_AI_API_KEY=your-local-api-key
+CAMPUSCIRCLE_AI_MODEL=your-model-name
+CAMPUSCIRCLE_AI_STRUCTURED_OUTPUT=true
+CAMPUSCIRCLE_AI_ENABLE_THINKING=false
+```
+
+`.env` 已被 Git 忽略，仓库只保留不含真实凭证的 `.env.example`。启动完整容器环境时，Docker Compose 会将这些变量传入应用容器。
+
 ## Test
 
 测试环境使用 H2 内存数据库，不依赖本地 MySQL、Redis 或 RocketMQ。
@@ -307,7 +362,10 @@ Windows PowerShell:
 - Spring Boot 上下文启动
 - 用户注册、登录和重复注册
 - 学校检索、附近学校查询和附近学校帖子 Feed
+- Feed 游标编解码、游标分页及跨页数据去重
 - 分类查询、发帖、评论创建和评论查询
 - 点赞、重复点赞、取消点赞和重复取消点赞
 - 通知查询、未读数统计
+- Redis 读取或写入异常时的数据库降级
+- AI 模型客户端装配、结构化请求和校园范围引用隔离
 - 未登录、非法分页、普通用户访问管理接口等边界场景
