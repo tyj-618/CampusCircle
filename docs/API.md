@@ -133,6 +133,25 @@ Authorization: Bearer <token>
 | `categoryId` | 分类 ID |
 | `sort` | 排序方式，`hot` 表示按热度排序 |
 
+## AI Assistant
+
+| Method | Path | Description | Login |
+| --- | --- | --- | --- |
+| POST | `/api/ai/assistant/ask` | Ask questions using posts from the current user's nearby-school scope | Yes |
+
+Request:
+
+```json
+{
+  "question": "附近有哪些适合复习的地方？",
+  "radiusKm": 10
+}
+```
+
+The backend derives the user and allowed school IDs from the token. It searches only published posts within that scope and returns supporting post references with the answer. When no relevant post is found, `insufficientEvidence` is `true`.
+
+For local development, `CAMPUSCIRCLE_AI_PROVIDER=mock` is the default. To use an OpenAI-compatible chat-completions service, set `CAMPUSCIRCLE_AI_PROVIDER=openai-compatible` and provide `CAMPUSCIRCLE_AI_BASE_URL`, `CAMPUSCIRCLE_AI_API_KEY`, and `CAMPUSCIRCLE_AI_MODEL` through environment variables. Set `CAMPUSCIRCLE_AI_STRUCTURED_OUTPUT=true` only when the selected provider supports the OpenAI-compatible JSON object response format; this mode omits `max_tokens` to prevent a truncated JSON response. For Qwen mixed-thinking models, set `CAMPUSCIRCLE_AI_ENABLE_THINKING=false` for short retrieval-augmented answers and enable it only for reasoning-heavy tasks. Do not commit a real API key.
+
 ## Comment
 
 | 方法 | 路径 | 说明 | 登录 |

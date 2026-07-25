@@ -3,8 +3,11 @@ package com.tyj.campuscircle.school;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Profile;
+import org.springframework.dao.DataAccessException;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
 
@@ -19,6 +22,7 @@ import java.util.function.Supplier;
 @Profile("redis")
 public class RedisNearbySchoolCacheStore implements NearbySchoolCacheStore {
 
+    private static final Logger LOGGER = LoggerFactory.getLogger(RedisNearbySchoolCacheStore.class);
     private static final String KEY_PREFIX = "campuscircle:school:nearby:";
     private static final TypeReference<List<SchoolResponse>> SCHOOL_LIST_TYPE = new TypeReference<>() {
     };
@@ -42,22 +46,37 @@ public class RedisNearbySchoolCacheStore implements NearbySchoolCacheStore {
     @Override
     public List<SchoolResponse> listNearbySchools(Long schoolId, double radiusKm, Supplier<List<SchoolResponse>> dbLoader) {
         String key = buildKey(schoolId, radiusKm);
-        String cachedValue = stringRedisTemplate.opsForValue().get(key);
+        String cachedValue;
+        try {
+            cachedValue = stringRedisTemplate.opsForValue().get(key);
+        } catch (DataAccessException ex) {
+            LOGGER.warn("Redis nearby-school cache unavailable, falling back to database", ex);
+            return dbLoader.get();
+        }
+
         if (cachedValue != null) {
             try {
                 return objectMapper.readValue(cachedValue, SCHOOL_LIST_TYPE);
             } catch (JsonProcessingException ex) {
-                stringRedisTemplate.delete(key);
+                evictCorruptedCache(key);
             }
         }
 
         List<SchoolResponse> schools = dbLoader.get();
         try {
             stringRedisTemplate.opsForValue().set(key, objectMapper.writeValueAsString(schools), ttlWithJitter());
-        } catch (JsonProcessingException ex) {
-            return schools;
+        } catch (JsonProcessingException | DataAccessException ex) {
+            LOGGER.warn("Failed to write nearby-school cache; returning database result", ex);
         }
         return schools;
+    }
+
+    private void evictCorruptedCache(String key) {
+        try {
+            stringRedisTemplate.delete(key);
+        } catch (DataAccessException ex) {
+            LOGGER.warn("Failed to evict corrupted nearby-school cache entry", ex);
+        }
     }
 
     private String buildKey(Long schoolId, double radiusKm) {

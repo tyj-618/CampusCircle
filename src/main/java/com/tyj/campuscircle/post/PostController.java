@@ -1,6 +1,7 @@
 package com.tyj.campuscircle.post;
 
 import com.tyj.campuscircle.common.ApiResponse;
+import com.tyj.campuscircle.common.CursorPageResponse;
 import com.tyj.campuscircle.common.PageResponse;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
@@ -56,6 +57,17 @@ public class PostController {
             @RequestParam(required = false) Long categoryId,
             @RequestParam(defaultValue = "latest") String sort) {
         return ApiResponse.success(postService.listNearbyFeed(authorization, page, size, radiusKm, categoryId, sort));
+    }
+
+    @GetMapping("/posts/feed/cursor")
+    public ApiResponse<CursorPageResponse<PostListItemResponse>> listNearbyFeedByCursor(
+            @RequestHeader(value = "Authorization", required = false) String authorization,
+            @RequestParam(defaultValue = "10") @Min(1) @Max(50) int size,
+            @RequestParam(defaultValue = "5") @Min(1) @Max(50) double radiusKm,
+            @RequestParam(required = false) Long categoryId,
+            @RequestParam(required = false) String cursor) {
+        return ApiResponse.success(postService.listNearbyFeedByCursor(
+                authorization, size, radiusKm, categoryId, cursor));
     }
 
     @GetMapping("/posts/{postId}")

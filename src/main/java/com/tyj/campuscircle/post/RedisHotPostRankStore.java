@@ -1,7 +1,11 @@
 package com.tyj.campuscircle.post;
 
 import org.springframework.context.annotation.Profile;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.dao.DataAccessException;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
@@ -16,6 +20,14 @@ import java.util.function.Supplier;
 @Component
 @Profile("redis")
 public class RedisHotPostRankStore implements HotPostRankStore {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(RedisHotPostRankStore.class);
+    private static final DefaultRedisScript<Long> RELEASE_LOCK_SCRIPT = new DefaultRedisScript<>(
+            "if redis.call('get', KEYS[1]) == ARGV[1] then "
+                    + "return redis.call('del', KEYS[1]) "
+                    + "else return 0 end",
+            Long.class
+    );
 
     private static final String ALL_POSTS_KEY = "campuscircle:rank:post:hot:all";
     private static final String CATEGORY_KEY_PREFIX = "campuscircle:rank:post:hot:category:";
@@ -47,11 +59,19 @@ public class RedisHotPostRankStore implements HotPostRankStore {
     @Override
     public List<PostHotItemResponse> listHotPosts(int limit, Long categoryId, Supplier<List<PostHotItemResponse>> dbLoader) {
         String key = buildKey(categoryId);
-        Set<String> postIdValues = stringRedisTemplate.opsForZSet().reverseRange(key, 0, limit - 1L);
-        if (postIdValues == null || postIdValues.isEmpty()) {
-            if (Boolean.TRUE.equals(stringRedisTemplate.hasKey(emptyKey(key)))) {
+        Set<String> postIdValues;
+        try {
+            postIdValues = stringRedisTemplate.opsForZSet().reverseRange(key, 0, limit - 1L);
+            if ((postIdValues == null || postIdValues.isEmpty())
+                    && Boolean.TRUE.equals(stringRedisTemplate.hasKey(emptyKey(key)))) {
                 return List.of();
             }
+        } catch (DataAccessException ex) {
+            LOGGER.warn("Redis hot-post cache unavailable, falling back to database", ex);
+            return dbLoader.get();
+        }
+
+        if (postIdValues == null || postIdValues.isEmpty()) {
             return reloadFromDatabase(key, dbLoader);
         }
 
@@ -70,63 +90,94 @@ public class RedisHotPostRankStore implements HotPostRankStore {
 
     @Override
     public void increaseScore(Long postId, Long categoryId, double delta) {
-        incrementIfPresent(ALL_POSTS_KEY, postId, delta);
-        if (categoryId != null) {
-            incrementIfPresent(buildCategoryKey(categoryId), postId, delta);
-        }
+        executeCacheUpdate("increase hot-post score", () -> {
+            incrementIfPresent(ALL_POSTS_KEY, postId, delta);
+            if (categoryId != null) {
+                incrementIfPresent(buildCategoryKey(categoryId), postId, delta);
+            }
+        });
     }
 
     @Override
     public void decreaseScore(Long postId, Long categoryId, double delta) {
-        incrementIfPresent(ALL_POSTS_KEY, postId, -delta);
-        if (categoryId != null) {
-            incrementIfPresent(buildCategoryKey(categoryId), postId, -delta);
-        }
+        executeCacheUpdate("decrease hot-post score", () -> {
+            incrementIfPresent(ALL_POSTS_KEY, postId, -delta);
+            if (categoryId != null) {
+                incrementIfPresent(buildCategoryKey(categoryId), postId, -delta);
+            }
+        });
     }
 
     @Override
     public void removePost(Long postId, Long categoryId) {
-        removeIfPresent(ALL_POSTS_KEY, postId);
-        if (categoryId != null) {
-            removeIfPresent(buildCategoryKey(categoryId), postId);
-        }
+        executeCacheUpdate("remove post from hot-post cache", () -> {
+            removeIfPresent(ALL_POSTS_KEY, postId);
+            if (categoryId != null) {
+                removeIfPresent(buildCategoryKey(categoryId), postId);
+            }
+        });
     }
 
     @Override
     public void moveCategory(Long postId, Long oldCategoryId, Long newCategoryId, double hotScore) {
-        if (oldCategoryId != null) {
-            removeIfPresent(buildCategoryKey(oldCategoryId), postId);
-        }
-        if (newCategoryId != null) {
-            addIfPresent(buildCategoryKey(newCategoryId), postId, hotScore);
-        }
+        executeCacheUpdate("move post between hot-post categories", () -> {
+            if (oldCategoryId != null) {
+                removeIfPresent(buildCategoryKey(oldCategoryId), postId);
+            }
+            if (newCategoryId != null) {
+                addIfPresent(buildCategoryKey(newCategoryId), postId, hotScore);
+            }
+        });
     }
 
     private List<PostHotItemResponse> reloadFromDatabase(String key, Supplier<List<PostHotItemResponse>> dbLoader) {
         String lockToken = UUID.randomUUID().toString();
-        Boolean locked = stringRedisTemplate.opsForValue().setIfAbsent(lockKey(key), lockToken, rebuildLockTtl);
+        Boolean locked;
+        try {
+            locked = stringRedisTemplate.opsForValue().setIfAbsent(lockKey(key), lockToken, rebuildLockTtl);
+        } catch (DataAccessException ex) {
+            LOGGER.warn("Redis rebuild lock unavailable, falling back to database", ex);
+            return dbLoader.get();
+        }
         if (!Boolean.TRUE.equals(locked)) {
             return dbLoader.get();
         }
 
         try {
             List<PostHotItemResponse> hotPosts = dbLoader.get();
-            stringRedisTemplate.delete(key);
-            stringRedisTemplate.delete(emptyKey(key));
-            if (hotPosts.isEmpty()) {
-                stringRedisTemplate.opsForValue().set(emptyKey(key), "1", emptyCacheTtl);
-                return hotPosts;
+            try {
+                stringRedisTemplate.delete(key);
+                stringRedisTemplate.delete(emptyKey(key));
+                if (hotPosts.isEmpty()) {
+                    stringRedisTemplate.opsForValue().set(emptyKey(key), "1", emptyCacheTtl);
+                } else {
+                    for (PostHotItemResponse hotPost : hotPosts) {
+                        stringRedisTemplate.opsForZSet().add(key, hotPost.id().toString(), hotPost.hotScore());
+                    }
+                    refreshRankTtl(key);
+                }
+            } catch (DataAccessException ex) {
+                LOGGER.warn("Failed to rebuild Redis hot-post cache; returning database result", ex);
             }
-            for (PostHotItemResponse hotPost : hotPosts) {
-                stringRedisTemplate.opsForZSet().add(key, hotPost.id().toString(), hotPost.hotScore());
-            }
-            refreshRankTtl(key);
             return hotPosts;
         } finally {
-            String currentToken = stringRedisTemplate.opsForValue().get(lockKey(key));
-            if (lockToken.equals(currentToken)) {
-                stringRedisTemplate.delete(lockKey(key));
-            }
+            releaseLock(key, lockToken);
+        }
+    }
+
+    private void executeCacheUpdate(String operation, Runnable cacheUpdate) {
+        try {
+            cacheUpdate.run();
+        } catch (DataAccessException ex) {
+            LOGGER.warn("Redis unavailable while attempting to {}; primary business result is preserved", operation, ex);
+        }
+    }
+
+    private void releaseLock(String key, String lockToken) {
+        try {
+            stringRedisTemplate.execute(RELEASE_LOCK_SCRIPT, List.of(lockKey(key)), lockToken);
+        } catch (DataAccessException ex) {
+            LOGGER.warn("Failed to release Redis rebuild lock; it will expire automatically", ex);
         }
     }
 

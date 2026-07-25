@@ -14,7 +14,9 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -114,6 +116,83 @@ class CampusCircleApiIntegrationTests {
         assertThat(duplicateUnlike.at("/data/likeCount").asInt()).isEqualTo(0);
     }
 
+    @Test
+    void nearbyFeedSupportsCursorPagination() throws Exception {
+        String suffix = String.valueOf(System.nanoTime());
+        String username = "cursor_" + suffix;
+        register(username, "123456", "Cursor User");
+        String token = login(username, "123456");
+        Long categoryId = firstCategoryId();
+
+        Long firstPostId = createPost(token, categoryId, "Cursor post 1 " + suffix);
+        Long secondPostId = createPost(token, categoryId, "Cursor post 2 " + suffix);
+        Long thirdPostId = createPost(token, categoryId, "Cursor post 3 " + suffix);
+
+        JsonNode firstPage = get("/api/posts/feed/cursor?radiusKm=30&size=2", token);
+        assertThat(firstPage.at("/code").asInt()).isZero();
+        assertThat(firstPage.at("/data/records").size()).isEqualTo(2);
+        assertThat(firstPage.at("/data/hasMore").asBoolean()).isTrue();
+        String nextCursor = firstPage.at("/data/nextCursor").asText();
+        assertThat(nextCursor).isNotBlank();
+
+        JsonNode secondPage = get("/api/posts/feed/cursor?radiusKm=30&size=2&cursor=" + nextCursor, token);
+        assertThat(secondPage.at("/code").asInt()).isZero();
+
+        Set<Long> firstPageIds = idsOf(firstPage);
+        Set<Long> secondPageIds = idsOf(secondPage);
+        assertThat(firstPageIds).doesNotContainAnyElementsOf(secondPageIds);
+        Set<Long> seenIds = new HashSet<>(firstPageIds);
+        seenIds.addAll(secondPageIds);
+        assertThat(seenIds)
+                .contains(firstPostId, secondPostId, thirdPostId);
+    }
+
+    @Test
+    void aiAssistantUsesOnlyAuthorizedNearbyPosts() throws Exception {
+        String suffix = String.valueOf(System.nanoTime());
+        String username = "assistant_" + suffix;
+        String remoteUsername = "remote_assistant_" + suffix;
+        String keyword = "studyspace" + suffix;
+        register(username, "123456", "Assistant User");
+        register(remoteUsername, "123456", "Remote User");
+        String token = login(username, "123456");
+        String remoteToken = login(remoteUsername, "123456");
+        JsonNode remoteProfile = put("/api/users/me", remoteToken, Map.of(
+                "nickname", "Remote User",
+                "schoolId", 4
+        ));
+        assertThat(remoteProfile.at("/code").asInt()).isZero();
+
+        Long postId = createPost(token, firstCategoryId(), keyword);
+        Long remotePostId = createPost(remoteToken, firstCategoryId(), keyword);
+        JsonNode response = post("/api/ai/assistant/ask", token, Map.of(
+                "question", keyword,
+                "radiusKm", 30
+        ));
+
+        assertThat(response.at("/code").asInt()).isZero();
+        assertThat(response.at("/data/insufficientEvidence").asBoolean()).isFalse();
+        assertThat(response.at("/data/requestId").asText()).isNotBlank();
+        assertThat(response.at("/data/references/0/postId").asLong()).isEqualTo(postId);
+        for (JsonNode reference : response.at("/data/references")) {
+            assertThat(reference.at("/postId").asLong()).isNotEqualTo(remotePostId);
+        }
+
+        JsonNode noEvidence = post("/api/ai/assistant/ask", token, Map.of(
+                "question", "unmatched" + suffix,
+                "radiusKm", 30
+        ));
+        assertThat(noEvidence.at("/code").asInt()).isZero();
+        assertThat(noEvidence.at("/data/insufficientEvidence").asBoolean()).isTrue();
+        assertThat(noEvidence.at("/data/references").size()).isZero();
+
+        JsonNode unauthorized = post("/api/ai/assistant/ask", null, Map.of(
+                "question", keyword,
+                "radiusKm", 30
+        ));
+        assertCode(unauthorized, 40100);
+    }
+
     private void register(String username, String password, String nickname) throws Exception {
         JsonNode response = post("/api/auth/register", null, Map.of(
                 "username", username,
@@ -146,9 +225,13 @@ class CampusCircleApiIntegrationTests {
     }
 
     private Long createPost(String token, Long categoryId) throws Exception {
+        return createPost(token, categoryId, "高数复习资料怎么整理？");
+    }
+
+    private Long createPost(String token, Long categoryId, String title) throws Exception {
         JsonNode response = post("/api/posts", token, Map.of(
                 "categoryId", categoryId,
-                "title", "高数复习资料怎么整理？",
+                "title", title,
                 "content", "想问问大家期末复习有什么方法。"
         ));
 
@@ -158,6 +241,14 @@ class CampusCircleApiIntegrationTests {
         Long postId = response.at("/data/postId").asLong();
         assertThat(postId).isPositive();
         return postId;
+    }
+
+    private Set<Long> idsOf(JsonNode page) {
+        Set<Long> ids = new HashSet<>();
+        for (JsonNode record : page.at("/data/records")) {
+            ids.add(record.at("/id").asLong());
+        }
+        return ids;
     }
 
     private void assertLocationFeed(String token, Long postId) throws Exception {

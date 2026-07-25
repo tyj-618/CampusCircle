@@ -9,6 +9,7 @@ import org.apache.ibatis.annotations.Select;
 import org.apache.ibatis.annotations.SelectProvider;
 import org.apache.ibatis.annotations.Update;
 
+import java.time.LocalDateTime;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
@@ -106,6 +107,30 @@ public interface PostMapper extends BaseMapper<PostEntity> {
         return new PageQueryResult<>(total, records);
     }
 
+    default List<PostListItem> findPostsBySchoolIdsAndKeyword(List<Long> schoolIds, String keyword, int limit) {
+        if (schoolIds.isEmpty() || keyword == null || keyword.isBlank()) {
+            return List.of();
+        }
+        return selectPosts(limit, 0, null, keyword, null, "latest", null, schoolIds);
+    }
+
+    @SelectProvider(type = PostSqlProvider.class, method = "findPostsAfterCursor")
+    List<PostListItem> selectPostsAfterCursor(@Param("limit") int limit,
+                                               @Param("categoryId") Long categoryId,
+                                               @Param("schoolIds") List<Long> schoolIds,
+                                               @Param("cursorCreatedAt") LocalDateTime cursorCreatedAt,
+                                               @Param("cursorId") Long cursorId);
+
+    default List<PostListItem> findPostsBySchoolIdsAfterCursor(List<Long> schoolIds, int limit,
+                                                                 Long categoryId, FeedCursor cursor) {
+        if (schoolIds.isEmpty()) {
+            return List.of();
+        }
+        LocalDateTime cursorCreatedAt = cursor == null ? null : cursor.createdAt();
+        Long cursorId = cursor == null ? null : cursor.id();
+        return selectPostsAfterCursor(limit, categoryId, schoolIds, cursorCreatedAt, cursorId);
+    }
+
     default List<PostListItem> findHotPosts(int limit, Long categoryId) {
         return selectPosts(limit, 0, categoryId, null, null, "hot", null, null);
     }
@@ -169,8 +194,8 @@ public interface PostMapper extends BaseMapper<PostEntity> {
 
         public String findPosts(Map<String, Object> params) {
             String orderBy = "hot".equalsIgnoreCase((String) params.get("sort"))
-                    ? "ps.hot_score DESC, p.created_at DESC"
-                    : "p.created_at DESC";
+                    ? "ps.hot_score DESC, p.created_at DESC, p.id DESC"
+                    : "p.created_at DESC, p.id DESC";
             return """
                     <script>
                     SELECT p.id, p.title, p.content,
@@ -193,16 +218,40 @@ public interface PostMapper extends BaseMapper<PostEntity> {
                     """;
         }
 
+        public String findPostsAfterCursor(Map<String, Object> params) {
+            return """
+                    <script>
+                    SELECT p.id, p.title, p.content,
+                           p.school_id AS schoolId, s.name AS schoolName, s.city AS schoolCity,
+                           p.category_id AS categoryId,
+                           c.name AS categoryName, c.code AS categoryCode,
+                           u.id AS authorId, u.nickname AS authorNickname, u.avatar_url AS authorAvatarUrl,
+                           ps.view_count AS viewCount, ps.like_count AS likeCount,
+                           ps.comment_count AS commentCount, ps.hot_score AS hotScore,
+                           p.created_at AS createdAt
+                    FROM post p
+                    JOIN school s ON p.school_id = s.id
+                    JOIN category c ON p.category_id = c.id
+                    JOIN `user` u ON p.user_id = u.id
+                    JOIN post_stat ps ON p.id = ps.post_id
+                    """ + whereClause(params)
+                    + cursorClause(params)
+                    + " ORDER BY p.created_at DESC, p.id DESC LIMIT #{limit}"
+                    + """
+                    </script>
+                    """;
+        }
+
         private String whereClause(Map<String, Object> params) {
             StringBuilder where = new StringBuilder(" WHERE p.status = 0");
-            if (params.get("categoryId") != null) {
+            if (params.containsKey("categoryId") && params.get("categoryId") != null) {
                 where.append(" AND p.category_id = #{categoryId}");
             }
-            String keyword = (String) params.get("keyword");
+            String keyword = params.containsKey("keyword") ? (String) params.get("keyword") : null;
             if (keyword != null && !keyword.isBlank()) {
                 where.append(" AND (p.title LIKE CONCAT('%', #{keyword}, '%') OR p.content LIKE CONCAT('%', #{keyword}, '%'))");
             }
-            if (params.get("userId") != null) {
+            if (params.containsKey("userId") && params.get("userId") != null) {
                 where.append(" AND p.user_id = #{userId}");
             }
             if (params.containsKey("schoolIds") && params.get("schoolIds") instanceof List<?> schoolIds && !schoolIds.isEmpty()) {
@@ -214,6 +263,14 @@ public interface PostMapper extends BaseMapper<PostEntity> {
                 where.append("<foreach collection=\"ids\" item=\"id\" open=\"(\" separator=\",\" close=\")\">#{id}</foreach>");
             }
             return where + " ";
+        }
+
+        private String cursorClause(Map<String, Object> params) {
+            if (params.get("cursorCreatedAt") == null || params.get("cursorId") == null) {
+                return "";
+            }
+            return " AND (p.created_at &lt; #{cursorCreatedAt}"
+                    + " OR (p.created_at = #{cursorCreatedAt} AND p.id &lt; #{cursorId}))";
         }
     }
 }

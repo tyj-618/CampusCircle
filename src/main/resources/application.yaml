@@ -42,3 +42,14 @@ campuscircle:
   nearby-school-cache:
     ttl-seconds: ${CAMPUSCIRCLE_NEARBY_SCHOOL_CACHE_TTL_SECONDS:300}
     jitter-seconds: ${CAMPUSCIRCLE_NEARBY_SCHOOL_CACHE_JITTER_SECONDS:60}
+  ai:
+    provider: ${CAMPUSCIRCLE_AI_PROVIDER:mock}
+    base-url: ${CAMPUSCIRCLE_AI_BASE_URL:}
+    api-key: ${CAMPUSCIRCLE_AI_API_KEY:}
+    model: ${CAMPUSCIRCLE_AI_MODEL:}
+    timeout-seconds: ${CAMPUSCIRCLE_AI_TIMEOUT_SECONDS:20}
+    max-retries: ${CAMPUSCIRCLE_AI_MAX_RETRIES:1}
+    max-requests-per-minute: ${CAMPUSCIRCLE_AI_MAX_REQUESTS_PER_MINUTE:5}
+    max-output-tokens: ${CAMPUSCIRCLE_AI_MAX_OUTPUT_TOKENS:600}
+    structured-output: ${CAMPUSCIRCLE_AI_STRUCTURED_OUTPUT:false}
+    enable-thinking: ${CAMPUSCIRCLE_AI_ENABLE_THINKING:}

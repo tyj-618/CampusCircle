@@ -1,6 +1,7 @@
 package com.tyj.campuscircle.post;
 
 import com.tyj.campuscircle.auth.CurrentUserService;
+import com.tyj.campuscircle.common.CursorPageResponse;
 import com.tyj.campuscircle.common.ErrorCode;
 import com.tyj.campuscircle.common.PageResponse;
 import com.tyj.campuscircle.exception.BusinessException;
@@ -73,6 +74,33 @@ public class PostService {
                 .map(PostListItemResponse::from)
                 .toList();
         return PageResponse.of(page, size, result.total(), records);
+    }
+
+    public CursorPageResponse<PostListItemResponse> listNearbyFeedByCursor(
+            String authorization, int size, double radiusKm, Long categoryId, String cursor) {
+        Long currentUserId = currentUserService.requireUserId(authorization);
+        UserProfile currentUser = findExistingUser(currentUserId);
+        if (categoryId != null) {
+            ensureEnabledCategory(categoryId);
+        }
+
+        FeedCursor feedCursor = cursor == null || cursor.isBlank() ? null : FeedCursorCodec.decode(cursor);
+        List<Long> schoolIds = schoolService.listNearbySchoolIds(currentUser.schoolId(), radiusKm);
+        List<PostListItem> fetchedRecords = postMapper.findPostsBySchoolIdsAfterCursor(
+                schoolIds, size + 1, categoryId, feedCursor);
+
+        boolean hasMore = fetchedRecords.size() > size;
+        List<PostListItem> pageItems = hasMore ? fetchedRecords.subList(0, size) : fetchedRecords;
+        List<PostListItemResponse> records = pageItems.stream()
+                .map(PostListItemResponse::from)
+                .toList();
+
+        String nextCursor = null;
+        if (hasMore) {
+            PostListItem lastItem = pageItems.get(pageItems.size() - 1);
+            nextCursor = FeedCursorCodec.encode(new FeedCursor(lastItem.createdAt(), lastItem.id()));
+        }
+        return new CursorPageResponse<>(records, nextCursor, hasMore);
     }
 
     public PostDetailResponse getPostDetail(Long postId, String authorization) {
