@@ -24,7 +24,9 @@ public class RocketMqEventConsumer {
 
         @Override
         public void onMessage(CommentCreatedEvent event) {
-            noticeService.createCommentNotice(event.receiverId(), event.senderId(), event.postId(), event.commentId());
+            noticeService.createCommentNotice(
+                    event.eventId(), event.receiverId(), event.senderId(), event.postId(), event.commentId()
+            );
         }
     }
 
@@ -44,7 +46,7 @@ public class RocketMqEventConsumer {
 
         @Override
         public void onMessage(PostLikedEvent event) {
-            noticeService.createLikeNotice(event.receiverId(), event.senderId(), event.postId());
+            noticeService.createLikeNotice(event.eventId(), event.receiverId(), event.senderId(), event.postId());
         }
     }
 }

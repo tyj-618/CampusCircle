@@ -15,6 +15,7 @@ public class RocketMqDomainEventPublisher implements DomainEventPublisher {
     public static final String HEADER_COMMENT_ID = "campuscircle-comment-id";
     public static final String HEADER_POST_ID = "campuscircle-post-id";
     public static final String HEADER_SENDER_ID = "campuscircle-sender-id";
+    public static final String HEADER_EVENT_ID = "campuscircle-event-id";
     public static final String EVENT_COMMENT_CREATED = "COMMENT_CREATED";
     public static final String EVENT_POST_LIKED = "POST_LIKED";
 
@@ -36,6 +37,7 @@ public class RocketMqDomainEventPublisher implements DomainEventPublisher {
         Message<CommentCreatedEvent> message = MessageBuilder.withPayload(event)
                 .setHeader(HEADER_EVENT_TYPE, EVENT_COMMENT_CREATED)
                 .setHeader(HEADER_COMMENT_ID, event.commentId())
+                .setHeader(HEADER_EVENT_ID, event.eventId())
                 .build();
         rocketMQTemplate.sendMessageInTransaction(commentTopic, message, null);
     }
@@ -46,6 +48,7 @@ public class RocketMqDomainEventPublisher implements DomainEventPublisher {
                 .setHeader(HEADER_EVENT_TYPE, EVENT_POST_LIKED)
                 .setHeader(HEADER_POST_ID, event.postId())
                 .setHeader(HEADER_SENDER_ID, event.senderId())
+                .setHeader(HEADER_EVENT_ID, event.eventId())
                 .build();
         rocketMQTemplate.sendMessageInTransaction(likeTopic, message, null);
     }

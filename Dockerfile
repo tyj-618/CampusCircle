@@ -12,5 +12,7 @@ FROM eclipse-temurin:17-jre
 WORKDIR /app
 COPY --from=build /workspace/target/*.jar app.jar
 
+ENV JAVA_TOOL_OPTIONS="-XX:InitialRAMPercentage=25.0 -XX:MaxRAMPercentage=70.0 -XX:+ExitOnOutOfMemoryError"
+
 EXPOSE 8080
 ENTRYPOINT ["java", "-jar", "/app/app.jar"]

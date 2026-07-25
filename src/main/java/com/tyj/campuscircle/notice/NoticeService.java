@@ -23,7 +23,7 @@ public class NoticeService {
         this.noticeMapper = noticeMapper;
     }
 
-    public void createCommentNotice(Long receiverId, Long senderId, Long postId, Long commentId) {
+    public void createCommentNotice(String eventId, Long receiverId, Long senderId, Long postId, Long commentId) {
         if (receiverId.equals(senderId)) {
             return;
         }
@@ -34,12 +34,12 @@ public class NoticeService {
                 postId,
                 commentId,
                 TYPE_COMMENT,
-                buildCommentEventKey(receiverId, senderId, postId, commentId),
+                buildEventKey(eventId),
                 "你的帖子收到了新的评论"
         ));
     }
 
-    public void createLikeNotice(Long receiverId, Long senderId, Long postId) {
+    public void createLikeNotice(String eventId, Long receiverId, Long senderId, Long postId) {
         if (receiverId.equals(senderId)) {
             return;
         }
@@ -50,7 +50,7 @@ public class NoticeService {
                 postId,
                 null,
                 TYPE_LIKE,
-                buildLikeEventKey(receiverId, senderId, postId),
+                buildEventKey(eventId),
                 "你的帖子收到了新的点赞"
         ));
     }
@@ -93,11 +93,10 @@ public class NoticeService {
         }
     }
 
-    private String buildCommentEventKey(Long receiverId, Long senderId, Long postId, Long commentId) {
-        return "comment:" + receiverId + ":" + senderId + ":" + postId + ":" + commentId;
-    }
-
-    private String buildLikeEventKey(Long receiverId, Long senderId, Long postId) {
-        return "like:" + receiverId + ":" + senderId + ":" + postId;
+    private String buildEventKey(String eventId) {
+        if (eventId == null || eventId.isBlank()) {
+            throw new BusinessException(ErrorCode.INTERNAL_ERROR, "事件标识不能为空");
+        }
+        return "event:" + eventId;
     }
 }

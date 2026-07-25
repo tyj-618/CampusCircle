@@ -57,7 +57,9 @@ public class LikeService {
 
         likeMapper.increaseLikeCount(postId);
         hotPostRankStore.increaseScore(postId, postDetail.categoryId(), HotPostRankStore.LIKE_SCORE);
-        domainEventPublisher.publishPostLiked(new PostLikedEvent(postDetail.userId(), currentUserId, postId));
+        domainEventPublisher.publishPostLiked(
+                PostLikedEvent.create(postDetail.userId(), currentUserId, postId)
+        );
         return new LikeResponse(true, likeMapper.findLikeCount(postId));
     }
 

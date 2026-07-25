@@ -49,7 +49,9 @@ public class CommentService {
 
         commentMapper.increaseCommentCount(postId);
         hotPostRankStore.increaseScore(postId, postDetail.categoryId(), HotPostRankStore.COMMENT_SCORE);
-        domainEventPublisher.publishCommentCreated(new CommentCreatedEvent(postDetail.userId(), currentUserId, postId, commentId));
+        domainEventPublisher.publishCommentCreated(
+                CommentCreatedEvent.create(postDetail.userId(), currentUserId, postId, commentId)
+        );
         return new CreateCommentResponse(commentId);
     }
 

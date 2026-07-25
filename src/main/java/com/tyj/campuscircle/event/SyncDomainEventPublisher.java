@@ -16,11 +16,13 @@ public class SyncDomainEventPublisher implements DomainEventPublisher {
 
     @Override
     public void publishCommentCreated(CommentCreatedEvent event) {
-        noticeService.createCommentNotice(event.receiverId(), event.senderId(), event.postId(), event.commentId());
+        noticeService.createCommentNotice(
+                event.eventId(), event.receiverId(), event.senderId(), event.postId(), event.commentId()
+        );
     }
 
     @Override
     public void publishPostLiked(PostLikedEvent event) {
-        noticeService.createLikeNotice(event.receiverId(), event.senderId(), event.postId());
+        noticeService.createLikeNotice(event.eventId(), event.receiverId(), event.senderId(), event.postId());
     }
 }

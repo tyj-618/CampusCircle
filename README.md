@@ -72,8 +72,10 @@ src/main/java/com/tyj/campuscircle
 - **缓存容错降级**：Redis 读取、写入或锁操作异常时保留数据库查询结果和主业务执行结果，避免缓存故障扩大为接口整体不可用。
 - **范围约束问答**：根据 Token 获取当前用户和所属学校，仅在指定半径内的正常帖子中检索上下文；模型返回后再次校验引用 ID，避免回答引用越权或不存在的帖子。
 - **模型接入封装**：抽象 `AiModelClient`，默认使用 Mock 完成本地开发，并支持通过 OpenAI 兼容协议接入 Qwen 等模型；提供超时、有限重试、用户级限流、结构化输出和 Token 用量日志。
-- **事件解耦通知**：抽象评论/点赞领域事件，默认同步消费，启用 RocketMQ 后使用事务消息投递，通知侧基于 `event_key` 做幂等写入。
+- **事件解耦通知**：抽象评论/点赞领域事件，默认同步消费，启用 RocketMQ 后使用事务消息投递；每个事件携带独立 `eventId`，通知侧将其写入唯一 `event_key`，既能抵抗重复投递，也能正确识别取消后再次点赞等新事件。
 - **浏览量削峰**：使用 `ConcurrentHashMap + LongAdder + ScheduledExecutorService` 聚合浏览量增量，定时批量刷库，减少高频浏览场景下的数据库写压力。
+- **浏览量失败重试**：定时刷库时通过读写锁换出计数缓冲区；数据库短暂异常时将未成功写入的增量合并回当前缓冲区，避免 `sumThenReset()` 后计数丢失。
+- **容器 JVM 边界**：镜像基于 JDK 17 的容器内存感知能力，使用 `InitialRAMPercentage`、`MaxRAMPercentage` 和 `ExitOnOutOfMemoryError` 控制堆内存与 OOM 行为，支持通过 `JAVA_TOOL_OPTIONS` 覆盖。
 - **接口一致性**：统一响应结构、错误码枚举、参数校验、业务异常和全局异常处理，保证正常返回和异常返回格式稳定。
 - **集成测试覆盖**：基于 H2 内存数据库覆盖注册登录、分类、发帖、评论、点赞、通知和权限边界流程。
 
@@ -250,6 +252,7 @@ source src/main/resources/db/data.sql;
 | `CAMPUSCIRCLE_AI_MAX_OUTPUT_TOKENS` | `600` | 非结构化模式下的最大输出 Token 数 |
 | `CAMPUSCIRCLE_AI_STRUCTURED_OUTPUT` | `false` | 是否要求模型使用 JSON Object 格式响应 |
 | `CAMPUSCIRCLE_AI_ENABLE_THINKING` | 空 | 是否启用模型思考模式，留空表示使用模型默认值 |
+| `JAVA_TOOL_OPTIONS` | 镜像内置 JVM 参数 | 可覆盖容器的 JVM 启动参数，例如堆内存比例和 GC 日志配置 |
 
 ### 本地 Maven 启动
 
