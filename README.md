@@ -14,6 +14,7 @@ CampusCircle 是一个基于学校地理位置的校园社区后端服务，支�
 - 热门帖子排行榜、浏览量批量刷库、Redis 异常时数据库降级
 - 基于附近学校帖子检索的校园信息智能问答，支持 Mock 和 OpenAI 兼容模型服务
 - 事件发布与消费扩展
+- 面向混合检索的 RAG v1 底座：检索接口抽象、ES 本地运行配置和权限范围前置约束
 
 ## Tech Stack
 
@@ -23,7 +24,7 @@ CampusCircle 是一个基于学校地理位置的校园社区后端服务，支�
 | 持久层 | MyBatis-Plus, MySQL |
 | 缓存与排行 | Redis, ZSet |
 | 消息事件 | RocketMQ |
-| AI 应用 | OpenAI-compatible API, Qwen, RAG |
+| AI 应用 | OpenAI-compatible API, Qwen, RAG, Elasticsearch（混合检索底座） |
 | 安全 | BCrypt password hashing, Bearer Token |
 | 工程化 | Docker, Docker Compose |
 | 测试 | JUnit, Spring Boot Test, H2 |
@@ -34,6 +35,7 @@ CampusCircle 是一个基于学校地理位置的校园社区后端服务，支�
 Controller -> Service -> Mapper(MyBatis-Plus) -> MySQL
                     |-> Redis
                     |-> RocketMQ
+                    |-> Elasticsearch（可选，RAG v1）
                     └-> AI Model API
 ```
 
@@ -343,6 +345,18 @@ CAMPUSCIRCLE_AI_ENABLE_THINKING=false
 ```
 
 `.env` 已被 Git 忽略，仓库只保留不含真实凭证的 `.env.example`。启动完整容器环境时，Docker Compose 会将这些变量传入应用容器。
+
+### Elasticsearch（RAG v1 预备环境）
+
+Elasticsearch 通过独立的 `search` profile 提供，不会影响只使用 MySQL 与 Redis 的默认开发环境：
+
+```powershell
+docker compose --profile search up -d elasticsearch
+curl http://localhost:9200
+```
+
+当前版本保留 SQL 关键词检索作为稳定实现，`CAMPUSCIRCLE_SEARCH_ENABLED` 默认值为 `false`。后续接入帖子
+向量化、索引消费者和 RRF 混合检索后，再将其打开；Elasticsearch 或 Embedding 不可用时，问答链路应回退到 SQL 检索。
 
 ## Test
 

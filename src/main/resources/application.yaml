@@ -53,3 +53,10 @@ campuscircle:
     max-output-tokens: ${CAMPUSCIRCLE_AI_MAX_OUTPUT_TOKENS:600}
     structured-output: ${CAMPUSCIRCLE_AI_STRUCTURED_OUTPUT:false}
     enable-thinking: ${CAMPUSCIRCLE_AI_ENABLE_THINKING:}
+  search:
+    enabled: ${CAMPUSCIRCLE_SEARCH_ENABLED:false}
+    base-url: ${CAMPUSCIRCLE_SEARCH_BASE_URL:http://localhost:9200}
+    post-index: ${CAMPUSCIRCLE_SEARCH_POST_INDEX:campuscircle-posts}
+    embedding-dimensions: ${CAMPUSCIRCLE_SEARCH_EMBEDDING_DIMENSIONS:1024}
+    candidate-limit: ${CAMPUSCIRCLE_SEARCH_CANDIDATE_LIMIT:20}
+    rrf-rank-constant: ${CAMPUSCIRCLE_SEARCH_RRF_RANK_CONSTANT:60}

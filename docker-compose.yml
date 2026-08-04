@@ -35,6 +35,28 @@ services:
       timeout: 5s
       retries: 10
 
+  elasticsearch:
+    profiles:
+      - search
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.19.8
+    container_name: campuscircle-elasticsearch
+    restart: unless-stopped
+    environment:
+      discovery.type: single-node
+      xpack.security.enabled: "false"
+      xpack.security.enrollment.enabled: "false"
+      ES_JAVA_OPTS: -Xms512m -Xmx512m
+    ports:
+      - "${CAMPUSCIRCLE_ES_PORT:-9200}:9200"
+    volumes:
+      - campuscircle-elasticsearch-data:/usr/share/elasticsearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:9200/_cluster/health?wait_for_status=yellow\\&timeout=1s >/dev/null"]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+      start_period: 45s
+
   app:
     profiles:
       - app
@@ -62,6 +84,12 @@ services:
       CAMPUSCIRCLE_AI_MAX_OUTPUT_TOKENS: ${CAMPUSCIRCLE_AI_MAX_OUTPUT_TOKENS:-600}
       CAMPUSCIRCLE_AI_STRUCTURED_OUTPUT: ${CAMPUSCIRCLE_AI_STRUCTURED_OUTPUT:-false}
       CAMPUSCIRCLE_AI_ENABLE_THINKING: ${CAMPUSCIRCLE_AI_ENABLE_THINKING:-}
+      CAMPUSCIRCLE_SEARCH_ENABLED: ${CAMPUSCIRCLE_SEARCH_ENABLED:-false}
+      CAMPUSCIRCLE_SEARCH_BASE_URL: http://elasticsearch:9200
+      CAMPUSCIRCLE_SEARCH_POST_INDEX: ${CAMPUSCIRCLE_SEARCH_POST_INDEX:-campuscircle-posts}
+      CAMPUSCIRCLE_SEARCH_EMBEDDING_DIMENSIONS: ${CAMPUSCIRCLE_SEARCH_EMBEDDING_DIMENSIONS:-1024}
+      CAMPUSCIRCLE_SEARCH_CANDIDATE_LIMIT: ${CAMPUSCIRCLE_SEARCH_CANDIDATE_LIMIT:-20}
+      CAMPUSCIRCLE_SEARCH_RRF_RANK_CONSTANT: ${CAMPUSCIRCLE_SEARCH_RRF_RANK_CONSTANT:-60}
     ports:
       - "${SERVER_PORT:-8080}:8080"
     depends_on:
@@ -69,7 +97,11 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      elasticsearch:
+        condition: service_healthy
+        required: false
 
 volumes:
   campuscircle-mysql-data:
   campuscircle-redis-data:
+  campuscircle-elasticsearch-data:

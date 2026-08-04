@@ -24,19 +24,19 @@ public class AiAssistantService {
     private final CurrentUserService currentUserService;
     private final UserMapper userMapper;
     private final SchoolService schoolService;
-    private final PostRetrievalService postRetrievalService;
+    private final PostRetriever postRetriever;
     private final PromptBuilder promptBuilder;
     private final AiModelClient aiModelClient;
     private final AiRequestRateLimiter aiRequestRateLimiter;
 
     public AiAssistantService(CurrentUserService currentUserService, UserMapper userMapper,
-                              SchoolService schoolService, PostRetrievalService postRetrievalService,
+                              SchoolService schoolService, PostRetriever postRetriever,
                               PromptBuilder promptBuilder, AiModelClient aiModelClient,
                               AiRequestRateLimiter aiRequestRateLimiter) {
         this.currentUserService = currentUserService;
         this.userMapper = userMapper;
         this.schoolService = schoolService;
-        this.postRetrievalService = postRetrievalService;
+        this.postRetriever = postRetriever;
         this.promptBuilder = promptBuilder;
         this.aiModelClient = aiModelClient;
         this.aiRequestRateLimiter = aiRequestRateLimiter;
@@ -50,7 +50,8 @@ public class AiAssistantService {
 
         double radiusKm = request.radiusKm() == null ? DEFAULT_RADIUS_KM : request.radiusKm();
         List<Long> allowedSchoolIds = schoolService.listNearbySchoolIds(user.schoolId(), radiusKm);
-        List<RetrievedPost> posts = postRetrievalService.retrieve(request.question(), allowedSchoolIds, RETRIEVAL_LIMIT);
+        List<RetrievedPost> posts = postRetriever.retrieve(
+                new RetrievalQuery(request.question(), allowedSchoolIds, RETRIEVAL_LIMIT));
         if (posts.isEmpty()) {
             return new AiAssistantResponse(
                     "在当前查看范围内暂未找到相关校园帖子。",

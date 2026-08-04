@@ -12,7 +12,7 @@ import java.util.Map;
 import java.util.Set;
 
 @Service
-public class PostRetrievalService {
+public class PostRetrievalService implements PostRetriever {
 
     private static final int MAX_QUERY_TERMS = 5;
 
@@ -22,17 +22,19 @@ public class PostRetrievalService {
         this.postMapper = postMapper;
     }
 
-    public List<RetrievedPost> retrieve(String question, List<Long> allowedSchoolIds, int limit) {
-        if (allowedSchoolIds.isEmpty()) {
+    @Override
+    public List<RetrievedPost> retrieve(RetrievalQuery query) {
+        if (query.allowedSchoolIds().isEmpty()) {
             return List.of();
         }
 
         Map<Long, RetrievedPost> postsById = new LinkedHashMap<>();
-        for (String keyword : extractKeywords(question)) {
-            List<PostListItem> posts = postMapper.findPostsBySchoolIdsAndKeyword(allowedSchoolIds, keyword, limit);
+        for (String keyword : extractKeywords(query.question())) {
+            List<PostListItem> posts = postMapper.findPostsBySchoolIdsAndKeyword(
+                    query.allowedSchoolIds(), keyword, query.limit());
             for (PostListItem post : posts) {
                 postsById.putIfAbsent(post.id(), RetrievedPost.from(post));
-                if (postsById.size() >= limit) {
+                if (postsById.size() >= query.limit()) {
                     return new ArrayList<>(postsById.values());
                 }
             }
